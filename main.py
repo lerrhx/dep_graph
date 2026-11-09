@@ -21,7 +21,7 @@ def parse_config(file_path):
         sys.exit(1)
 
     settings = config['Settings']
-    required_keys = ['package_name', 'repo_url', 'test_mode', 'version', 'output_file', 'max_depth', 'filter_substring']
+    required_keys = ['package_name', 'repo_url', 'test_mode', 'version', 'output_file', 'max_depth', 'filter_substring', 'ascii_tree']
     
     for key in required_keys:
         if key not in settings:
@@ -37,6 +37,7 @@ def parse_config(file_path):
         sys.exit(1)
 
     test_mode = settings.getboolean('test_mode')
+    ascii_tree = settings.getboolean('ascii_tree')
 
     return {
         'package_name': settings['package_name'],
@@ -45,7 +46,8 @@ def parse_config(file_path):
         'version': settings['version'],
         'output_file': settings['output_file'],
         'max_depth': max_depth,
-        'filter_substring': settings['filter_substring']
+        'filter_substring': settings['filter_substring'],
+        'ascii_tree': ascii_tree
     }
 
 def load_test_repo(file_path):
@@ -124,6 +126,34 @@ def get_load_order(graph, start_package):
     dfs(start_package)
     return order
 
+def generate_mermaid(graph):
+    lines = ["graph TD"]
+    for pkg, deps in graph.items():
+        if not deps:
+            lines.append(f"    {pkg}")
+        else:
+            for dep in deps:
+                lines.append(f"    {pkg} --> {dep}")
+    return "\n".join(lines)
+
+def save_svg(filename, mermaid_text):
+    svg_content = f'''<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300">
+  <text x="10" y="20" font-family="Arial" font-size="14">Граф зависимостей (Mermaid):</text>
+  <text x="10" y="40" font-family="Arial" font-size="12">{mermaid_text.replace(chr(10), ' | ')}</text>
+</svg>'''
+    try:
+        with open(filename, 'w', encoding='utf-8') as f:
+            f.write(svg_content)
+        print(f"SVG-файл сохранен: {filename}")
+    except Exception as e:
+        print(f"Ошибка сохранения SVG: {e}")
+
+def print_ascii_tree(graph, start_node, prefix="", is_last=True):
+    print(prefix + ("└── " if is_last else "├── ") + start_node)
+    children = graph.get(start_node, [])
+    for i, child in enumerate(children):
+        print_ascii_tree(graph, child, prefix + ("    " if is_last else "│   "), i == len(children) - 1)
+
 def main():
     config_path = 'config.ini'
     if len(sys.argv) > 1:
@@ -146,14 +176,26 @@ def main():
         
         if not graph:
             print("Граф пуст или пакет не найден.")
-        else:
-            for pkg, deps in graph.items():
-                deps_str = ", ".join(deps) if deps else "нет"
-                print(f"{pkg} -> [{deps_str}]")
-                
-            print("\n--- Порядок загрузки зависимостей ---")
-            load_order = get_load_order(graph, params['package_name'])
-            print(" -> ".join(load_order))
+            return
+
+        for pkg, deps in graph.items():
+            deps_str = ", ".join(deps) if deps else "нет"
+            print(f"{pkg} -> [{deps_str}]")
+            
+        print("\n--- Порядок загрузки зависимостей ---")
+        load_order = get_load_order(graph, params['package_name'])
+        print(" -> ".join(load_order))
+
+        print("\n--- Визуализация ---")
+        mermaid_code = generate_mermaid(graph)
+        print("Mermaid-код:")
+        print(mermaid_code)
+        
+        save_svg(params['output_file'], mermaid_code)
+
+        if params['ascii_tree']:
+            print("\n--- ASCII-дерево ---")
+            print_ascii_tree(graph, params['package_name'])
 
 if __name__ == "__main__":
     main()
