@@ -109,6 +109,21 @@ def build_graph_bfs(start_package, repo_path, max_depth, filter_substring):
                 
     return graph
 
+def get_load_order(graph, start_package):
+    visited = set()
+    order = []
+    
+    def dfs(node):
+        if node in visited:
+            return
+        visited.add(node)
+        for dep in graph.get(node, []):
+            dfs(dep)
+        order.append(node)
+        
+    dfs(start_package)
+    return order
+
 def main():
     config_path = 'config.ini'
     if len(sys.argv) > 1:
@@ -135,6 +150,10 @@ def main():
             for pkg, deps in graph.items():
                 deps_str = ", ".join(deps) if deps else "нет"
                 print(f"{pkg} -> [{deps_str}]")
+                
+            print("\n--- Порядок загрузки зависимостей ---")
+            load_order = get_load_order(graph, params['package_name'])
+            print(" -> ".join(load_order))
 
 if __name__ == "__main__":
     main()
