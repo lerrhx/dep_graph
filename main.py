@@ -1,6 +1,7 @@
 import configparser
 import sys
 import os
+from collections import deque
 
 def parse_config(file_path):
     config = configparser.ConfigParser()
@@ -72,15 +73,41 @@ def load_test_repo(file_path):
         
     return dependencies
 
-def get_direct_dependencies(package_name, repo_path):
+def build_graph_bfs(start_package, repo_path, max_depth, filter_substring):
     data = load_test_repo(repo_path)
     if not data:
-        return []
+        return {}
+
+    graph = {}
+    queue = deque()
+    
+    queue.append((start_package, 0))
+    visited = set()
+    
+    while queue:
+        current_pkg, current_depth = queue.popleft()
         
-    if package_name in data:
-        return data[package_name]
-    else:
-        return None
+        if current_pkg in visited:
+            continue
+            
+        visited.add(current_pkg)
+        graph[current_pkg] = []
+        
+        if current_depth >= max_depth:
+            continue
+
+        if current_pkg not in data:
+            continue
+            
+        for dep in data[current_pkg]:
+            if filter_substring and filter_substring in dep:
+                continue
+                
+            graph[current_pkg].append(dep)
+            if dep not in visited:
+                queue.append((dep, current_depth + 1))
+                
+    return graph
 
 def main():
     config_path = 'config.ini'
@@ -94,15 +121,20 @@ def main():
         print(f"{key} = {value}")
         
     if params['test_mode']:
-        print("\n--- Режим тестирования ---")
-        deps = get_direct_dependencies(params['package_name'], params['repo_url'])
+        print("\n--- Построение графа (BFS) ---")
+        graph = build_graph_bfs(
+            params['package_name'], 
+            params['repo_url'], 
+            params['max_depth'], 
+            params['filter_substring']
+        )
         
-        if deps is None:
-            print(f"Ошибка: Пакет '{params['package_name']}' не найден в тестовом репозитории.")
+        if not graph:
+            print("Граф пуст или пакет не найден.")
         else:
-            print(f"Прямые зависимости для пакета '{params['package_name']}':")
-            for dep in deps:
-                print(f" - {dep}")
+            for pkg, deps in graph.items():
+                deps_str = ", ".join(deps) if deps else "нет"
+                print(f"{pkg} -> [{deps_str}]")
 
 if __name__ == "__main__":
     main()
